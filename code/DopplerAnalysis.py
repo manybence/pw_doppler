@@ -4,100 +4,53 @@ Created on 18-01-2024
 
 @author: Richard, Bence
 """
-from tkinter import Tk
-from tkinter.filedialog import askopenfilename
-from sklearn import preprocessing
-import csv
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.pyplot import figure
-import pywt
-import statistics
+import doppler_lib as dl
+from matplotlib.colors import LinearSegmentedColormap
+from scipy.signal import hilbert
 
-def find_file():
-        
-    #Open file dialog to pick the desired BoM
-    root = Tk()
-    root.attributes('-topmost', True)
-    root.iconify() 
-    file_path = askopenfilename(title='Select M-mode data', parent=root)
-    print("File selected: ", file_path)
-    root.destroy()
-    return file_path
 
-def read_csv(file_name, start_row, end_row):
-    data = []
+fs = 80e6
+pulse_length = 128
+number_of_pulses = int(7168/pulse_length)
+
+
+# Read the data file
+filename = dl.find_file()
+data, depths, time = dl.read_csv(filename)
+
+image = np.empty((0, len(data[1])))
+for depth in data[1:]:
+    depth_image = []
+    for line in depth:
+        filtered = dl.band_pass_filter(line)
+        pulses = []
+        cancelled = []
+        for i in range(number_of_pulses):
+            pulse_i = filtered[i * pulse_length : (i + 1) * pulse_length]
+            hann_window = np.hanning(len(pulse_i))
+            pulse_i = pulse_i * hann_window
+            pulses.append(pulse_i)
+        for i in range(len(pulses)-1):
+            p1_norm = pulses[i+1] / np.max(np.abs(pulses[i+1]))
+            scale_factor = np.dot(p1_norm, pulses[i]) / np.dot(pulses[i], pulses[i])
+            p2_adjusted = scale_factor * pulses[i]
+            diff_i = p1_norm - p2_adjusted
+            signal_hilbert = hilbert(diff_i)   #Hilbert-transorm
+            signal_envelope = np.abs(signal_hilbert)    #Calculating the envelope signal
+            cancelled.append(signal_envelope)
+        depth_image.append(np.mean(cancelled, axis = 0))
+    transposed = np.array(depth_image).T       #Rotating the image
+    image = np.vstack((image, transposed))
+
+c = 255 / np.log(1 + np.max(image))
+log_image = c * (np.log(image + 1))    #Logarithmic transformation of the image
+
+fig = plt.figure()
+plt.imshow(log_image, cmap="gray", extent=(min(time) / 10e6, max(time) / 10e6, max(depths) * 128 * 1.48 / 80 / 2, min(depths) * 128 * 1.48 / 80 / 2))  
+plt.title("Stationary echo cancelled pulses")
+plt.xlabel("Time (s)")
+plt.ylabel("Depth (mm)")
+
     
-    with open(file_name, 'r') as f:
-        reader = csv.reader(f)
-        
-        header = next(reader)  # Read the header
-        if not header:
-            return
-        
-        # Check if header matches expected format
-        expected_header = ["XPOS","IDX","TIME","DACVAL","OFFSET"] + [f"D[{i}]" for i in range(7168)]
-        if header != expected_header:
-            raise ValueError("Unexpected header format")
-
-        # Skip rows until the start_row
-        for _ in range(start_row - 1):
-            next(reader, None)  # None handles cases where we run out of rows
-        
-        # Read the data from start_row to end_row
-        for current_row_number in range(start_row, end_row + 1):
-            try:
-                row = next(reader)
-            except StopIteration:
-                break  # end of file reached
-
-            data.append([float(val) for val in row[0:]])
-            
-    return data
-
-N = 512
-filename = find_file()
-
-for index in range(1,32):
-    figure(figsize=(40, 4), dpi=600)
-    data = read_csv(filename,index,index)
-    ll = []
-    for e in data:
-        debug = (e[2] == 296749);
-        f = e[5:]    
-        m = statistics.median(f)
-        for i in range(0,14):
-            l=[]
-            #Extracting bins with width = N
-            signal = f[i * N : (i + 1) * N]
-            plt.plot(signal,linewidth=0.5)
-            
-            #Finding the zero-crossings
-            for j in range(N-1):
-                a = signal[j]-m
-                b = signal[j+1]-m
-                if ( ((a < 0.0) and (b >= 0.0)) or ((a > 0.0) and (b <= 0.0)) ) :
-                    l.append(j+1/(1-b/a))   #Linear interpolation
-            ll.append(l)
-            
-    sums = []
-    plt.axhline(y=statistics.median(f), color='black', linestyle='-',linewidth=0.5)
-        
-    for k in range(len(l)):
-        plt.axvline(x=l[k], linestyle='-',linewidth=0.5)        
-    
-    
-    plt.title(filename 
-              + ", XPOS="+str(data[0][0]) + " [mm]"
-              + ", IDX="+str(int(data[0][1])) 
-              + ", TIME="+str(int(data[0][2])) + " [us]"
-              + ", DACVAL="+str(int(data[0][3])) 
-              + ", OFFSET="+str(int(data[0][4])))
-    #plt.show()
-    plt.savefig(filename 
-              + ", XPOS="+str(data[0][0]) + "mm"
-              + ", IDX="+str(int(data[0][1])) 
-              + ", TIME="+str(int(data[0][2])) + "us"
-              + ", DACVAL="+str(int(data[0][3])) 
-              + ", OFFSET="+str(int(data[0][4]))+".png")
-
