@@ -192,19 +192,44 @@ def signal_processing(data):
         data_filtered.append(segment)
     return data_filtered
 
-def display_doppler_image(image, vmax=5):
+def display_doppler_image(image, x_range, y_range, v_max=5):
+    
+    x_scale_factor = 10e6
+    y_scale_factor = 128 * 1.48 / 80 / 2
     
     # Define custom colormap
     colors = [(0, 0, 1), (0, 0, 0), (1, 0, 0)]  # Red, Black, Blue
     n_bins = 100
     cmap_name = "doppler_cmap"
-    custom_cmap = LinearSegmentedColormap.from_list(cmap_name, colors, N=n_bins)
+    doppler_cmap = LinearSegmentedColormap.from_list(cmap_name, colors, N=n_bins)
+    
+    #Display Doppler Color FLow image
+    plt.figure()
     display = np.array(image)
-    plt.imshow(display, cmap=custom_cmap, vmin=-v_max, vmax=v_max)
+    plt.imshow(display, cmap=doppler_cmap, vmin=-v_max, vmax=v_max, 
+               extent=(min(x_range) / x_scale_factor, max(x_range) / x_scale_factor, max(y_range) * y_scale_factor, min(y_range) * y_scale_factor))
     plt.title("Doppler Color Flow Image")
-    plt.ylabel("Depth segment")
-    plt.xlabel("Measurements")
+    plt.ylabel("Depth segment (mm)")
+    plt.xlabel("Time (s)")
     plt.colorbar(label='Velocity (cm/s)')
+    
+def median_filter(image, kernel_size=3):
+    padded_image = np.pad(image, pad_width=kernel_size//2, mode='constant', constant_values=0)
+    filtered_image = np.zeros_like(image)
+    for i in range(image.shape[0]):
+        for j in range(image.shape[1]):
+            filtered_image[i, j] = np.median(padded_image[i:i+kernel_size, j:j+kernel_size])
+    return filtered_image
+
+def moving_avg_filter(image, window_size=10):
+    filtered_image = []
+    kernel = np.ones(window_size) / window_size
+    for line in image:
+        filtered_line = np.convolve(line, kernel, mode='same')
+        filtered_image.append(filtered_line)    
+    return filtered_image
+
+
     
 
     
