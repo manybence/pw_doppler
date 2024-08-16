@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Visualization</title>
+  </head>
+  <body>
+    <h1>Upload a Text File</h1>
+    <form method="post" enctype="multipart/form-data">
+      <input type="file" name="file" accept=".txt">
+      <button type="submit">Upload</button>
+    </form>
+    {% if img_data %}
+      <h2>Data Visualization</h2>
+      <img src="data:image/png;base64,{{ img_data }}" alt="Data Visualization">
+    {% endif %}
+  </body>
+</html>
